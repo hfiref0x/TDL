@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     1.00
+*  VERSION:     1.10
 *
-*  DATE:        01 Feb 2016
+*  DATE:        17 Apr 2017
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -25,43 +25,43 @@
 *
 */
 PVOID supGetSystemInfo(
-	_In_ SYSTEM_INFORMATION_CLASS InfoClass
-	)
+    _In_ SYSTEM_INFORMATION_CLASS InfoClass
+)
 {
-	INT         c = 0;
-	PVOID       Buffer = NULL;
-	ULONG		Size = 0x1000;
-	NTSTATUS    status;
-	ULONG       memIO;
-	PVOID       hHeap = NtCurrentPeb()->ProcessHeap;
+    INT         c = 0;
+    PVOID       Buffer = NULL;
+    ULONG		Size = 0x1000;
+    NTSTATUS    status;
+    ULONG       memIO;
+    PVOID       hHeap = NtCurrentPeb()->ProcessHeap;
 
-	do {
-		Buffer = RtlAllocateHeap(hHeap, HEAP_ZERO_MEMORY, (SIZE_T)Size);
-		if (Buffer != NULL) {
-			status = NtQuerySystemInformation(InfoClass, Buffer, Size, &memIO);
-		}
-		else {
-			return NULL;
-		}
-		if (status == STATUS_INFO_LENGTH_MISMATCH) {
-			RtlFreeHeap(hHeap, 0, Buffer);
-			Size *= 2;
-			c++;
-			if (c > 100) {
-				status = STATUS_SECRET_TOO_LONG;
-				break;
-			}
-		}
-	} while (status == STATUS_INFO_LENGTH_MISMATCH);
+    do {
+        Buffer = RtlAllocateHeap(hHeap, HEAP_ZERO_MEMORY, (SIZE_T)Size);
+        if (Buffer != NULL) {
+            status = NtQuerySystemInformation(InfoClass, Buffer, Size, &memIO);
+        }
+        else {
+            return NULL;
+        }
+        if (status == STATUS_INFO_LENGTH_MISMATCH) {
+            RtlFreeHeap(hHeap, 0, Buffer);
+            Size *= 2;
+            c++;
+            if (c > 100) {
+                status = STATUS_SECRET_TOO_LONG;
+                break;
+            }
+        }
+    } while (status == STATUS_INFO_LENGTH_MISMATCH);
 
-	if (NT_SUCCESS(status)) {
-		return Buffer;
-	}
+    if (NT_SUCCESS(status)) {
+        return Buffer;
+    }
 
-	if (Buffer) {
-		RtlFreeHeap(hHeap, 0, Buffer);
-	}
-	return NULL;
+    if (Buffer) {
+        RtlFreeHeap(hHeap, 0, Buffer);
+    }
+    return NULL;
 }
 
 /*
@@ -73,19 +73,19 @@ PVOID supGetSystemInfo(
 *
 */
 ULONG_PTR supGetNtOsBase(
-	VOID
-	)
+    VOID
+)
 {
-	PRTL_PROCESS_MODULES   miSpace;
-	ULONG_PTR              NtOsBase = 0;
+    PRTL_PROCESS_MODULES   miSpace;
+    ULONG_PTR              NtOsBase = 0;
 
-	miSpace = supGetSystemInfo(SystemModuleInformation);
-	while (miSpace != NULL) {
-		NtOsBase = (ULONG_PTR)miSpace->Modules[0].ImageBase;
-		RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, miSpace);
-		break;
-	}
-	return NtOsBase;
+    miSpace = supGetSystemInfo(SystemModuleInformation);
+    while (miSpace != NULL) {
+        NtOsBase = (ULONG_PTR)miSpace->Modules[0].ImageBase;
+        RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, miSpace);
+        break;
+    }
+    return NtOsBase;
 }
 
 /*
@@ -97,34 +97,34 @@ ULONG_PTR supGetNtOsBase(
 *
 */
 PBYTE supQueryResourceData(
-	_In_ ULONG_PTR ResourceId,
-	_In_ PVOID DllHandle,
-	_In_ PULONG DataSize
-	)
+    _In_ ULONG_PTR ResourceId,
+    _In_ PVOID DllHandle,
+    _In_ PULONG DataSize
+)
 {
-	NTSTATUS                    status;
-	ULONG_PTR                   IdPath[3];
-	IMAGE_RESOURCE_DATA_ENTRY  *DataEntry;
-	PBYTE                       Data = NULL;
-	ULONG                       SizeOfData = 0;
+    NTSTATUS                    status;
+    ULONG_PTR                   IdPath[3];
+    IMAGE_RESOURCE_DATA_ENTRY  *DataEntry;
+    PBYTE                       Data = NULL;
+    ULONG                       SizeOfData = 0;
 
-	if (DllHandle != NULL) {
+    if (DllHandle != NULL) {
 
-		IdPath[0] = (ULONG_PTR)RT_RCDATA; //type
-		IdPath[1] = ResourceId;           //id
-		IdPath[2] = 0;                    //lang
+        IdPath[0] = (ULONG_PTR)RT_RCDATA; //type
+        IdPath[1] = ResourceId;           //id
+        IdPath[2] = 0;                    //lang
 
-		status = LdrFindResource_U(DllHandle, (ULONG_PTR*)&IdPath, 3, &DataEntry);
-		if (NT_SUCCESS(status)) {
-			status = LdrAccessResource(DllHandle, DataEntry, &Data, &SizeOfData);
-			if (NT_SUCCESS(status)) {
-				if (DataSize) {
-					*DataSize = SizeOfData;
-				}
-			}
-		}
-	}
-	return Data;
+        status = LdrFindResource_U(DllHandle, (ULONG_PTR*)&IdPath, 3, &DataEntry);
+        if (NT_SUCCESS(status)) {
+            status = LdrAccessResource(DllHandle, DataEntry, &Data, &SizeOfData);
+            if (NT_SUCCESS(status)) {
+                if (DataSize) {
+                    *DataSize = SizeOfData;
+                }
+            }
+        }
+    }
+    return Data;
 }
 
 /*
@@ -136,39 +136,39 @@ PBYTE supQueryResourceData(
 *
 */
 BOOL supBackupVBoxDrv(
-	_In_ BOOL bRestore
-	)
+    _In_ BOOL bRestore
+)
 {
-	BOOL  bResult = FALSE;
-	WCHAR szOldDriverName[MAX_PATH * 2];
-	WCHAR szNewDriverName[MAX_PATH * 2];
-	WCHAR szDriverDirName[MAX_PATH * 2];
+    BOOL  bResult = FALSE;
+    WCHAR szOldDriverName[MAX_PATH * 2];
+    WCHAR szNewDriverName[MAX_PATH * 2];
+    WCHAR szDriverDirName[MAX_PATH * 2];
 
-	if (!GetSystemDirectory(szDriverDirName, MAX_PATH)) {
-		return FALSE;
-	}
+    if (!GetSystemDirectory(szDriverDirName, MAX_PATH)) {
+        return FALSE;
+    }
 
-	_strcat(szDriverDirName, TEXT("\\drivers\\"));
+    _strcat(szDriverDirName, TEXT("\\drivers\\"));
 
-	if (bRestore) {
-		_strcpy(szOldDriverName, szDriverDirName);
-		_strcat(szOldDriverName, TEXT("VBoxDrv.backup"));
-		if (PathFileExists(szOldDriverName)) {
-			_strcpy(szNewDriverName, szDriverDirName);
-			_strcat(szNewDriverName, TEXT("VBoxDrv.sys"));
-			bResult = MoveFileEx(szOldDriverName, szNewDriverName,
-				MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-		}
-	}
-	else {
-		_strcpy(szOldDriverName, szDriverDirName);
-		_strcat(szOldDriverName, TEXT("VBoxDrv.sys"));
-		_strcpy(szNewDriverName, szDriverDirName);
-		_strcat(szNewDriverName, TEXT("VBoxDrv.backup"));
-		bResult = MoveFileEx(szOldDriverName, szNewDriverName,
-			MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-	}
-	return bResult;
+    if (bRestore) {
+        _strcpy(szOldDriverName, szDriverDirName);
+        _strcat(szOldDriverName, TEXT("VBoxDrv.backup"));
+        if (PathFileExists(szOldDriverName)) {
+            _strcpy(szNewDriverName, szDriverDirName);
+            _strcat(szNewDriverName, TEXT("VBoxDrv.sys"));
+            bResult = MoveFileEx(szOldDriverName, szNewDriverName,
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+        }
+    }
+    else {
+        _strcpy(szOldDriverName, szDriverDirName);
+        _strcat(szOldDriverName, TEXT("VBoxDrv.sys"));
+        _strcpy(szNewDriverName, szDriverDirName);
+        _strcat(szNewDriverName, TEXT("VBoxDrv.backup"));
+        bResult = MoveFileEx(szOldDriverName, szNewDriverName,
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    }
+    return bResult;
 }
 
 /*
@@ -180,93 +180,93 @@ BOOL supBackupVBoxDrv(
 *
 */
 SIZE_T supWriteBufferToFile(
-	_In_ PWSTR lpFileName,
-	_In_ PVOID Buffer,
-	_In_ SIZE_T Size,
-	_In_ BOOL Flush,
-	_In_ BOOL Append
-	)
+    _In_ PWSTR lpFileName,
+    _In_ PVOID Buffer,
+    _In_ SIZE_T Size,
+    _In_ BOOL Flush,
+    _In_ BOOL Append
+)
 {
-	NTSTATUS           Status;
-	DWORD              dwFlag;
-	HANDLE             hFile = NULL;
-	OBJECT_ATTRIBUTES  attr;
-	UNICODE_STRING     NtFileName;
-	IO_STATUS_BLOCK    IoStatus;
-	LARGE_INTEGER      Position;
-	ACCESS_MASK        DesiredAccess;
-	PLARGE_INTEGER     pPosition = NULL;
-	ULONG_PTR          nBlocks, BlockIndex;
-	ULONG              BlockSize, RemainingSize;
-	PBYTE              ptr = (PBYTE)Buffer;
-	SIZE_T             BytesWritten = 0;
+    NTSTATUS           Status;
+    DWORD              dwFlag;
+    HANDLE             hFile = NULL;
+    OBJECT_ATTRIBUTES  attr;
+    UNICODE_STRING     NtFileName;
+    IO_STATUS_BLOCK    IoStatus;
+    LARGE_INTEGER      Position;
+    ACCESS_MASK        DesiredAccess;
+    PLARGE_INTEGER     pPosition = NULL;
+    ULONG_PTR          nBlocks, BlockIndex;
+    ULONG              BlockSize, RemainingSize;
+    PBYTE              ptr = (PBYTE)Buffer;
+    SIZE_T             BytesWritten = 0;
 
-	if (RtlDosPathNameToNtPathName_U(lpFileName, &NtFileName, NULL, NULL) == FALSE)
-		return 0;
+    if (RtlDosPathNameToNtPathName_U(lpFileName, &NtFileName, NULL, NULL) == FALSE)
+        return 0;
 
-	DesiredAccess = FILE_WRITE_ACCESS | SYNCHRONIZE;
-	dwFlag = FILE_OVERWRITE_IF;
+    DesiredAccess = FILE_WRITE_ACCESS | SYNCHRONIZE;
+    dwFlag = FILE_OVERWRITE_IF;
 
-	if (Append == TRUE) {
-		DesiredAccess |= FILE_READ_ACCESS;
-		dwFlag = FILE_OPEN_IF;
-	}
+    if (Append != FALSE) {
+        DesiredAccess |= FILE_READ_ACCESS;
+        dwFlag = FILE_OPEN_IF;
+    }
 
-	InitializeObjectAttributes(&attr, &NtFileName, OBJ_CASE_INSENSITIVE, 0, NULL);
+    InitializeObjectAttributes(&attr, &NtFileName, OBJ_CASE_INSENSITIVE, 0, NULL);
 
-	__try {
-		Status = NtCreateFile(&hFile, DesiredAccess, &attr,
-			&IoStatus, NULL, FILE_ATTRIBUTE_NORMAL, 0, dwFlag,
-			FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0);
+    __try {
+        Status = NtCreateFile(&hFile, DesiredAccess, &attr,
+            &IoStatus, NULL, FILE_ATTRIBUTE_NORMAL, 0, dwFlag,
+            FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0);
 
-		if (!NT_SUCCESS(Status))
-			__leave;
+        if (!NT_SUCCESS(Status))
+            __leave;
 
-		pPosition = NULL;
+        pPosition = NULL;
 
-		if (Append == TRUE) {
-			Position.LowPart = FILE_WRITE_TO_END_OF_FILE;
-			Position.HighPart = -1;
-			pPosition = &Position;
-		}
+        if (Append != FALSE) {
+            Position.LowPart = FILE_WRITE_TO_END_OF_FILE;
+            Position.HighPart = -1;
+            pPosition = &Position;
+        }
 
-		if (Size < 0x80000000) {
-			BlockSize = (ULONG)Size;
-			Status = NtWriteFile(hFile, 0, NULL, NULL, &IoStatus, ptr, BlockSize, pPosition, NULL);
-			if (!NT_SUCCESS(Status))
-				__leave;
+        if (Size < 0x80000000) {
+            BlockSize = (ULONG)Size;
+            Status = NtWriteFile(hFile, 0, NULL, NULL, &IoStatus, ptr, BlockSize, pPosition, NULL);
+            if (!NT_SUCCESS(Status))
+                __leave;
 
-			BytesWritten += IoStatus.Information;
-		}
-		else {
-			BlockSize = 0x7FFFFFFF;
-			nBlocks = (Size / BlockSize);
-			for (BlockIndex = 0; BlockIndex < nBlocks; BlockIndex++) {
+            BytesWritten += IoStatus.Information;
+        }
+        else {
+            BlockSize = 0x7FFFFFFF;
+            nBlocks = (Size / BlockSize);
+            for (BlockIndex = 0; BlockIndex < nBlocks; BlockIndex++) {
 
-				Status = NtWriteFile(hFile, 0, NULL, NULL, &IoStatus, ptr, BlockSize, pPosition, NULL);
-				if (!NT_SUCCESS(Status))
-					__leave;
+                Status = NtWriteFile(hFile, 0, NULL, NULL, &IoStatus, ptr, BlockSize, pPosition, NULL);
+                if (!NT_SUCCESS(Status))
+                    __leave;
 
-				ptr += BlockSize;
-				BytesWritten += IoStatus.Information;
-			}
-			RemainingSize = Size % BlockSize;
-			if (RemainingSize != 0) {
-				Status = NtWriteFile(hFile, 0, NULL, NULL, &IoStatus, ptr, RemainingSize, pPosition, NULL);
-				if (!NT_SUCCESS(Status))
-					__leave;
-				BytesWritten += IoStatus.Information;
-			}
-		}
-	}
-	__finally {
-		if (hFile != NULL) {
-			if (Flush == TRUE) NtFlushBuffersFile(hFile, &IoStatus);
-			NtClose(hFile);
-		}
-		RtlFreeUnicodeString(&NtFileName);
-	}
-	return BytesWritten;
+                ptr += BlockSize;
+                BytesWritten += IoStatus.Information;
+            }
+            RemainingSize = (ULONG)(Size % BlockSize);
+            if (RemainingSize != 0) {
+                Status = NtWriteFile(hFile, 0, NULL, NULL, &IoStatus, ptr, RemainingSize, pPosition, NULL);
+                if (!NT_SUCCESS(Status))
+                    __leave;
+                BytesWritten += IoStatus.Information;
+            }
+        }
+    }
+    __finally {
+        if (hFile != NULL) {
+            if (Flush != FALSE) NtFlushBuffersFile(hFile, &IoStatus);
+            NtClose(hFile);
+        }
+        RtlFreeUnicodeString(&NtFileName);
+    }
+    return BytesWritten;
 }
 
 /*
@@ -278,30 +278,30 @@ SIZE_T supWriteBufferToFile(
 *
 */
 NTSTATUS NTAPI supDetectObjectCallback(
-	_In_ POBJECT_DIRECTORY_INFORMATION Entry,
-	_In_ PVOID CallbackParam
-	)
+    _In_ POBJECT_DIRECTORY_INFORMATION Entry,
+    _In_ PVOID CallbackParam
+)
 {
-	POBJSCANPARAM Param = (POBJSCANPARAM)CallbackParam;
+    POBJSCANPARAM Param = (POBJSCANPARAM)CallbackParam;
 
-	if (Entry == NULL) {
-		return STATUS_INVALID_PARAMETER_1;
-	}
+    if (Entry == NULL) {
+        return STATUS_INVALID_PARAMETER_1;
+    }
 
-	if (CallbackParam == NULL) {
-		return STATUS_INVALID_PARAMETER_2;
-	}
+    if (CallbackParam == NULL) {
+        return STATUS_INVALID_PARAMETER_2;
+    }
 
-	if (Param->Buffer == NULL || Param->BufferSize == 0) {
-		return STATUS_MEMORY_NOT_ALLOCATED;
-	}
+    if (Param->Buffer == NULL || Param->BufferSize == 0) {
+        return STATUS_MEMORY_NOT_ALLOCATED;
+    }
 
-	if (Entry->Name.Buffer) {
-		if (_strcmpi_w(Entry->Name.Buffer, Param->Buffer) == 0) {
-			return STATUS_SUCCESS;
-		}
-	}
-	return STATUS_UNSUCCESSFUL;
+    if (Entry->Name.Buffer) {
+        if (_strcmpi_w(Entry->Name.Buffer, Param->Buffer) == 0) {
+            return STATUS_SUCCESS;
+        }
+    }
+    return STATUS_UNSUCCESSFUL;
 }
 
 /*
@@ -313,87 +313,87 @@ NTSTATUS NTAPI supDetectObjectCallback(
 *
 */
 NTSTATUS NTAPI supEnumSystemObjects(
-	_In_opt_ LPWSTR pwszRootDirectory,
-	_In_opt_ HANDLE hRootDirectory,
-	_In_ PENUMOBJECTSCALLBACK CallbackProc,
-	_In_opt_ PVOID CallbackParam
-	)
+    _In_opt_ LPWSTR pwszRootDirectory,
+    _In_opt_ HANDLE hRootDirectory,
+    _In_ PENUMOBJECTSCALLBACK CallbackProc,
+    _In_opt_ PVOID CallbackParam
+)
 {
-	BOOL                cond = TRUE;
-	ULONG               ctx, rlen;
-	HANDLE              hDirectory = NULL;
-	NTSTATUS            status;
-	NTSTATUS            CallbackStatus;
-	OBJECT_ATTRIBUTES   attr;
-	UNICODE_STRING      sname;
+    BOOL                cond = TRUE;
+    ULONG               ctx, rlen;
+    HANDLE              hDirectory = NULL;
+    NTSTATUS            status;
+    NTSTATUS            CallbackStatus;
+    OBJECT_ATTRIBUTES   attr;
+    UNICODE_STRING      sname;
 
-	POBJECT_DIRECTORY_INFORMATION    objinf;
+    POBJECT_DIRECTORY_INFORMATION    objinf;
 
-	if (CallbackProc == NULL) {
-		return STATUS_INVALID_PARAMETER_4;
-	}
+    if (CallbackProc == NULL) {
+        return STATUS_INVALID_PARAMETER_4;
+    }
 
-	status = STATUS_UNSUCCESSFUL;
+    status = STATUS_UNSUCCESSFUL;
 
-	__try {
+    __try {
 
-		// We can use root directory.
-		if (pwszRootDirectory != NULL) {
-			RtlSecureZeroMemory(&sname, sizeof(sname));
-			RtlInitUnicodeString(&sname, pwszRootDirectory);
-			InitializeObjectAttributes(&attr, &sname, OBJ_CASE_INSENSITIVE, NULL, NULL);
-			status = NtOpenDirectoryObject(&hDirectory, DIRECTORY_QUERY, &attr);
-			if (!NT_SUCCESS(status)) {
-				return status;
-			}
-		}
-		else {
-			if (hRootDirectory == NULL) {
-				return STATUS_INVALID_PARAMETER_2;
-			}
-			hDirectory = hRootDirectory;
-		}
+        // We can use root directory.
+        if (pwszRootDirectory != NULL) {
+            RtlSecureZeroMemory(&sname, sizeof(sname));
+            RtlInitUnicodeString(&sname, pwszRootDirectory);
+            InitializeObjectAttributes(&attr, &sname, OBJ_CASE_INSENSITIVE, NULL, NULL);
+            status = NtOpenDirectoryObject(&hDirectory, DIRECTORY_QUERY, &attr);
+            if (!NT_SUCCESS(status)) {
+                return status;
+            }
+        }
+        else {
+            if (hRootDirectory == NULL) {
+                return STATUS_INVALID_PARAMETER_2;
+            }
+            hDirectory = hRootDirectory;
+        }
 
-		// Enumerate objects in directory.
-		ctx = 0;
-		do {
+        // Enumerate objects in directory.
+        ctx = 0;
+        do {
 
-			rlen = 0;
-			status = NtQueryDirectoryObject(hDirectory, NULL, 0, TRUE, FALSE, &ctx, &rlen);
-			if (status != STATUS_BUFFER_TOO_SMALL)
-				break;
+            rlen = 0;
+            status = NtQueryDirectoryObject(hDirectory, NULL, 0, TRUE, FALSE, &ctx, &rlen);
+            if (status != STATUS_BUFFER_TOO_SMALL)
+                break;
 
-			objinf = RtlAllocateHeap(NtCurrentPeb()->ProcessHeap, HEAP_ZERO_MEMORY, rlen);
-			if (objinf == NULL)
-				break;
+            objinf = RtlAllocateHeap(NtCurrentPeb()->ProcessHeap, HEAP_ZERO_MEMORY, rlen);
+            if (objinf == NULL)
+                break;
 
-			status = NtQueryDirectoryObject(hDirectory, objinf, rlen, TRUE, FALSE, &ctx, &rlen);
-			if (!NT_SUCCESS(status)) {
-				RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, objinf);
-				break;
-			}
+            status = NtQueryDirectoryObject(hDirectory, objinf, rlen, TRUE, FALSE, &ctx, &rlen);
+            if (!NT_SUCCESS(status)) {
+                RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, objinf);
+                break;
+            }
 
-			CallbackStatus = CallbackProc(objinf, CallbackParam);
+            CallbackStatus = CallbackProc(objinf, CallbackParam);
 
-			RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, objinf);
+            RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, objinf);
 
-			if (NT_SUCCESS(CallbackStatus)) {
-				status = STATUS_SUCCESS;
-				break;
-			}
+            if (NT_SUCCESS(CallbackStatus)) {
+                status = STATUS_SUCCESS;
+                break;
+            }
 
-		} while (cond);
+        } while (cond);
 
-		if (hDirectory != NULL) {
-			NtClose(hDirectory);
-		}
+        if (hDirectory != NULL) {
+            NtClose(hDirectory);
+        }
 
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
-		status = STATUS_ACCESS_VIOLATION;
-	}
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        status = STATUS_ACCESS_VIOLATION;
+    }
 
-	return status;
+    return status;
 }
 
 /*
@@ -405,18 +405,18 @@ NTSTATUS NTAPI supEnumSystemObjects(
 *
 */
 BOOL supIsObjectExists(
-	_In_ LPWSTR RootDirectory,
-	_In_ LPWSTR ObjectName
-	)
+    _In_ LPWSTR RootDirectory,
+    _In_ LPWSTR ObjectName
+)
 {
-	OBJSCANPARAM Param;
+    OBJSCANPARAM Param;
 
-	if (ObjectName == NULL) {
-		return FALSE;
-	}
+    if (ObjectName == NULL) {
+        return FALSE;
+    }
 
-	Param.Buffer = ObjectName;
-	Param.BufferSize = (ULONG)_strlen(ObjectName);
+    Param.Buffer = ObjectName;
+    Param.BufferSize = (ULONG)_strlen(ObjectName);
 
-	return NT_SUCCESS(supEnumSystemObjects(RootDirectory, NULL, supDetectObjectCallback, &Param));
+    return NT_SUCCESS(supEnumSystemObjects(RootDirectory, NULL, supDetectObjectCallback, &Param));
 }

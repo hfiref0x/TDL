@@ -32,7 +32,7 @@ In order to build from source you need Microsoft Visual Studio 2015 U1 and later
 
 # Authors
 
-(c) 2016 TDL Project
+(c) 2016 - 2017 TDL Project
 
 # Credits
 

@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       SUP.H
 *
-*  VERSION:     1.00
+*  VERSION:     1.10
 *
-*  DATE:        01 Feb 2016
+*  DATE:        17 Apr 2017
 *
 *  Common header file for the program support routines.
 *
@@ -21,39 +21,39 @@
 typedef NTSTATUS(NTAPI *PENUMOBJECTSCALLBACK)(POBJECT_DIRECTORY_INFORMATION Entry, PVOID CallbackParam);
 
 typedef struct _OBJSCANPARAM {
-	PWSTR Buffer;
-	ULONG BufferSize;
+    PWSTR Buffer;
+    ULONG BufferSize;
 } OBJSCANPARAM, *POBJSCANPARAM;
 
 ULONG_PTR supGetNtOsBase(
-	VOID
-	);
+    VOID
+);
 
 PVOID supGetSystemInfo(
-	_In_ SYSTEM_INFORMATION_CLASS InfoClass
-	);
+    _In_ SYSTEM_INFORMATION_CLASS InfoClass
+);
 
 PBYTE supQueryResourceData(
-	_In_ ULONG_PTR ResourceId,
-	_In_ PVOID DllHandle,
-	_In_ PULONG DataSize
-	);
+    _In_ ULONG_PTR ResourceId,
+    _In_ PVOID DllHandle,
+    _In_ PULONG DataSize
+);
 
 BOOL supBackupVBoxDrv(
-	_In_ BOOL bRestore
-	);
+    _In_ BOOL bRestore
+);
 
 SIZE_T supWriteBufferToFile(
-	_In_ PWSTR lpFileName,
-	_In_ PVOID Buffer,
-	_In_ SIZE_T Size,
-	_In_ BOOL Flush,
-	_In_ BOOL Append
-	);
+    _In_ PWSTR lpFileName,
+    _In_ PVOID Buffer,
+    _In_ SIZE_T Size,
+    _In_ BOOL Flush,
+    _In_ BOOL Append
+);
 
 BOOL supIsObjectExists(
-	_In_ LPWSTR RootDirectory,
-	_In_ LPWSTR ObjectName
-	);
+    _In_ LPWSTR RootDirectory,
+    _In_ LPWSTR ObjectName
+);
 
 #define PathFileExists(lpszPath) (GetFileAttributes(lpszPath) != (DWORD)-1)
