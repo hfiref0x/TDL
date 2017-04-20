@@ -1,12 +1,14 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.00
+*  VERSION:     1.01
 *
-*  DATE:        29 Jan 2016
+*  DATE:        20 Apr 2017
+*
+*  "Driverless" example #2
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -18,6 +20,51 @@
 #include "main.h"
 
 #define DEBUGPRINT
+
+/*
+* PrintIrql
+*
+* Purpose:
+*
+* Debug print current irql.
+*
+*/
+VOID PrintIrql()
+{
+    KIRQL Irql;
+    PWSTR sIrql;
+
+    Irql = KeGetCurrentIrql();
+
+    switch (Irql) {
+
+    case PASSIVE_LEVEL:
+        sIrql = L"PASSIVE_LEVEL";
+        break;
+    case APC_LEVEL:
+        sIrql = L"APC_LEVEL";
+        break;
+    case DISPATCH_LEVEL:
+        sIrql = L"DISPATCH_LEVEL";
+        break;
+    case CMCI_LEVEL:
+        sIrql = L"CMCI_LEVEL";
+        break;
+    case CLOCK_LEVEL:
+        sIrql = L"CLOCK_LEVEL";
+        break;
+    case IPI_LEVEL:
+        sIrql = L"IPI_LEVEL";
+        break;
+    case HIGH_LEVEL:
+        sIrql = L"HIGH_LEVEL";
+        break;
+    default:
+        sIrql = L"Unknown Value";
+        break;
+    }
+    DbgPrint("KeGetCurrentIrql=%u(%ws)\n", Irql, sIrql);
+}
 
 /*
 * DevioctlDispatch
@@ -168,26 +215,6 @@ NTSTATUS CloseDispatch(
 	return Irp->IoStatus.Status;
 }
 
-VOID ListModules(
-	_In_  struct _DRIVER_OBJECT *DriverObject
-	)
-{
-	PLIST_ENTRY            entry0, entry1;
-	KLDR_DATA_TABLE_ENTRY *section = (KLDR_DATA_TABLE_ENTRY*)DriverObject->DriverSection;
-
-	if (section == NULL)
-		return;
-
-	entry0 = section->InLoadOrderLinks.Flink;
-	entry1 = entry0;
-
-	do {
-		section = (KLDR_DATA_TABLE_ENTRY*)CONTAINING_RECORD(entry1, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-		DbgPrint("Section=%p, %wZ", section, section->BaseDllName);
-		entry1 = entry1->Flink;
-	} while (entry1 != entry0);
-}
-
 /*
 * DriverInitialize
 *
@@ -202,37 +229,33 @@ NTSTATUS DriverInitialize(
 	)
 {
 	NTSTATUS        status;
-	UNICODE_STRING  SymLink, DevName/*, DrvRefName*/;
+	UNICODE_STRING  SymLink, DevName;
 	PDEVICE_OBJECT  devobj;
 	ULONG           t;
-	WCHAR szDevName[] = { L'\\', L'D', L'e', L'v', L'i', L'c', L'e', L'\\', L'T', L'D', L'L', L'D', 0 };
-	WCHAR szSymLink[] = { L'\\', L'D', L'o', L's', L'D', L'e', L'v', L'i', L'c', L'e', L's', L'\\', L'T', L'D', L'L', L'D', 0 };
-//	WCHAR szNullDrv[] = { L'\\', L'D', L'r', L'i', L'v', L'e', L'r', L'\\', L'N', L'u', L'l', L'l', 0 };
-//	PDRIVER_OBJECT  driverObject;
 
 	//RegistryPath is NULL
-	UNREFERENCED_PARAMETER(RegistryPath);
+	UNREFERENCED_PARAMETER(RegistryPath);   
 
 #ifdef DEBUGPRINT
-	DbgPrint("%s", __FUNCTION__);
+	DbgPrint("%s\n", __FUNCTION__);
 #endif
 
-	RtlInitUnicodeString(&DevName, szDevName);
+	RtlInitUnicodeString(&DevName, L"\\Device\\TDLD");
 	status = IoCreateDevice(DriverObject, 0, &DevName, FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN, TRUE, &devobj);
 
 #ifdef DEBUGPRINT
-	DbgPrint("%s IoCreateDevice(%wZ) = %lx", __FUNCTION__, DevName, status);
+	DbgPrint("%s IoCreateDevice(%wZ) = %lx\n", __FUNCTION__, DevName, status);
 #endif
 
 	if (!NT_SUCCESS(status)) {
 		return status;
 	}
 
-	RtlInitUnicodeString(&SymLink, szSymLink);
+	RtlInitUnicodeString(&SymLink, L"\\DosDevices\\TDLD");
 	status = IoCreateSymbolicLink(&SymLink, &DevName);
 
 #ifdef DEBUGPRINT
-	DbgPrint("%s IoCreateSymbolicLink(%wZ) = %lx", __FUNCTION__, SymLink, status);
+	DbgPrint("%s IoCreateSymbolicLink(%wZ) = %lx\n", __FUNCTION__, SymLink, status);
 #endif
 
 	devobj->Flags |= DO_BUFFERED_IO;
@@ -246,17 +269,6 @@ NTSTATUS DriverInitialize(
 	DriverObject->DriverUnload = NULL; //nonstandard way of driver loading, no unload
 
 	devobj->Flags &= ~DO_DEVICE_INITIALIZING;
-/*
-	RtlInitUnicodeString(&DrvRefName, szNullDrv);
-	if (NT_SUCCESS(ObReferenceObjectByName(&DrvRefName, OBJ_CASE_INSENSITIVE, NULL, 0, 
-		*IoDriverObjectType, KernelMode, NULL, &driverObject)))
-	{
-		DbgPrint("drvObj %p", driverObject);
-		ListModules(driverObject);
-		ObDereferenceObject(driverObject);
-	}
-	*/
-
 	return status;
 }
 
@@ -274,22 +286,23 @@ NTSTATUS DriverEntry(
 )
 {
 	NTSTATUS        status;
-	UNICODE_STRING  drvName;
-	WCHAR szDrvName[] = { L'\\', L'D', L'r', L'i', L'v', L'e', L'r', L'\\', L'T', L'D', L'L', L'D', 0 };
-
+	UNICODE_STRING  drvName;   
+    
 	/* This parameters are invalid due to nonstandard way of loading and should not be used. */
 	UNREFERENCED_PARAMETER(DriverObject);
 	UNREFERENCED_PARAMETER(RegistryPath);
 
+    PrintIrql();
+
 #ifdef DEBUGPRINT
-	DbgPrint("%s", __FUNCTION__);
+	DbgPrint("%s\n", __FUNCTION__);
 #endif
 
-	RtlInitUnicodeString(&drvName, szDrvName);
+	RtlInitUnicodeString(&drvName, L"\\Driver\\TDLD");
 	status = IoCreateDriver(&drvName, &DriverInitialize);
 
 #ifdef DEBUGPRINT
-	DbgPrint("%s IoCreateDriver(%wZ) = %lx", __FUNCTION__, drvName, status);
+	DbgPrint("%s IoCreateDriver(%wZ) = %lx\n", __FUNCTION__, drvName, status);
 #endif
 
 	return status;

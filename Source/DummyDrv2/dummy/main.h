@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       MAIN.H
 *
-*  VERSION:     1.00
+*  VERSION:     1.01
 *
-*  DATE:        29 Jan 2016
+*  DATE:        20 Apr 2017
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -23,21 +23,6 @@ IoCreateDriver(
 	IN PUNICODE_STRING DriverName, OPTIONAL
 	IN PDRIVER_INITIALIZE InitializationFunction
 	);
-
-NTKERNELAPI
-NTSTATUS
-ObReferenceObjectByName(
-	__in PUNICODE_STRING ObjectName,
-	__in ULONG Attributes,
-	__in_opt PACCESS_STATE AccessState,
-	__in_opt ACCESS_MASK DesiredAccess,
-	__in POBJECT_TYPE ObjectType,
-	__in KPROCESSOR_MODE AccessMode,
-	__inout_opt PVOID ParseContext,
-	__out PVOID *Object
-	);
-
-extern POBJECT_TYPE *IoDriverObjectType;
 
 _Dispatch_type_(IRP_MJ_DEVICE_CONTROL)
 DRIVER_DISPATCH DevioctlDispatch;
@@ -88,25 +73,3 @@ typedef struct _INOUT_PARAM {
 	ULONG Param3;
 	ULONG Param4;
 } INOUT_PARAM, *PINOUTPARAM;
-
-typedef struct _KLDR_DATA_TABLE_ENTRY {
-	LIST_ENTRY InLoadOrderLinks;
-	PVOID ExceptionTable;
-	ULONG ExceptionTableSize;
-	// ULONG padding on IA64
-	PVOID GpValue;
-	PVOID NonPagedDebugInfo;
-	PVOID DllBase;
-	PVOID EntryPoint;
-	ULONG SizeOfImage;
-	UNICODE_STRING FullDllName;
-	UNICODE_STRING BaseDllName;
-	ULONG Flags;
-	USHORT LoadCount;
-	USHORT __Unused5;
-	PVOID SectionPointer;
-	ULONG CheckSum;
-	// ULONG padding on IA64
-	PVOID LoadedImports;
-	PVOID PatchInformation;
-} KLDR_DATA_TABLE_ENTRY, *PKLDR_DATA_TABLE_ENTRY;

