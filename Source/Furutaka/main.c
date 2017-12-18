@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.11
+*  VERSION:     1.12
 *
-*  DATE:        20 Apr 2017
+*  DATE:        01 Dec 2017
 *
 *  Furutaka entry point.
 *
@@ -41,11 +41,11 @@ ULONG      g_NtBuildNumber = 0;
 #define supImageHandle  0x1a000
 #define PAGE_SIZE       0x1000
 
-#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.1 (20/04/17)")
+#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.2 (01/12/17)")
 #define T_LOADERUNSUP   TEXT("Unsupported WinNT version\r\n")
 #define T_LOADERRUN     TEXT("Another instance running, close it before\r\n")
 #define T_LOADERUSAGE   TEXT("Usage: loader drivertoload\n\re.g. loader mydrv.sys\r\n")
-#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.1 started\r\n(c) 2016 - 2017 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
+#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.2 started\r\n(c) 2016 - 2017 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
 
 /*
 * TDLVBoxInstalled

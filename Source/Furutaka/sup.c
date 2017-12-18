@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     1.10
+*  VERSION:     1.12
 *
-*  DATE:        17 Apr 2017
+*  DATE:        01 Dec 2017
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -45,6 +45,7 @@ PVOID supGetSystemInfo(
         }
         if (status == STATUS_INFO_LENGTH_MISMATCH) {
             RtlFreeHeap(hHeap, 0, Buffer);
+            Buffer = NULL;
             Size *= 2;
             c++;
             if (c > 100) {
