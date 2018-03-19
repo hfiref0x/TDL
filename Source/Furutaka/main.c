@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2017
+*  (C) COPYRIGHT AUTHORS, 2016 - 2018
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.12
+*  VERSION:     1.13
 *
-*  DATE:        01 Dec 2017
+*  DATE:        09 Mar 2018
 *
 *  Furutaka entry point.
 *
@@ -41,11 +41,11 @@ ULONG      g_NtBuildNumber = 0;
 #define supImageHandle  0x1a000
 #define PAGE_SIZE       0x1000
 
-#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.2 (01/12/17)")
+#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.3 (09/03/18)")
 #define T_LOADERUNSUP   TEXT("Unsupported WinNT version\r\n")
 #define T_LOADERRUN     TEXT("Another instance running, close it before\r\n")
 #define T_LOADERUSAGE   TEXT("Usage: loader drivertoload\n\re.g. loader mydrv.sys\r\n")
-#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.2 started\r\n(c) 2016 - 2017 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
+#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.3 started\r\n(c) 2016 - 2018 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
 
 /*
 * TDLVBoxInstalled
@@ -382,6 +382,7 @@ UINT TDLMapDriver(
 )
 {
     UINT               result = (UINT)-1;
+    ULONG              DllCharacteristics = IMAGE_FILE_EXECUTABLE_IMAGE;
     ULONG              isz, prologueSize, dataOffset;
     SIZE_T             memIO;
     ULONG_PTR          KernelBase, KernelImage = 0;
@@ -403,7 +404,7 @@ UINT TDLMapDriver(
 
         RtlSecureZeroMemory(&uStr, sizeof(uStr));
         RtlInitUnicodeString(&uStr, lpDriverFullName);
-        status = LdrLoadDll(NULL, NULL, &uStr, (PVOID)&Image);
+        status = LdrLoadDll(NULL, &DllCharacteristics, &uStr, (PVOID)&Image);
         if ((!NT_SUCCESS(status)) || (Image == NULL)) {
             cuiPrintText(g_ConOut, TEXT("Ldr: Error while loading input driver file"), g_ConsoleOutput, TRUE);
             break;
@@ -867,7 +868,7 @@ void TDLMain()
         _strcat(text, TEXT(" build "));
         ultostr(osv.dwBuildNumber, _strend(text));
         cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
-
+#if 0
         //
         // If VirtualBox installed on the same machine warn user,
         // however this is unnecessary can lead to any conflicts.
@@ -878,6 +879,7 @@ void TDLMain()
                 TEXT("Ldr: Warning, VirtualBox software installed, conflicts are possible"),
                 g_ConsoleOutput, TRUE);
         }
+#endif
 
         uResult = TDLProcessCommandLine(GetCommandLine());
 
