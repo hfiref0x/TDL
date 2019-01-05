@@ -33,13 +33,25 @@ It uses WinNT/Turla VirtualBox kernel mode exploit technique to write code to th
 TDL comes with full source code.
 In order to build from source you need Microsoft Visual Studio 2015 U1 and later versions. For driver builds you need Microsoft Windows Driver Kit 8.1 and/or above.
 
+## Instructions
+
+* Select Platform ToolSet first for project in solution you want to build (Project->Properties->General): 
+  * v120 for Visual Studio 2013;
+  * v140 for Visual Studio 2015; 
+  * v141 for Visual Studio 2017.
+* For v140 and above set Target Platform Version (Project->Properties->General):
+  * If v140 then select 8.1 (Note that Windows 8.1 SDK must be installed);
+  * If v141 then select 10.0.17763.0 (Note that Windows 10.0.17763 SDK must be installed).
+  
+Remove linker option /NOCOFFGRPINFO where it unsupported/unavailable.
+
 # Deprecation
 
 TDL based on old Oracle VirtualBox driver which was created in 2008. This driver wasn't designed to be compatible with newest Windows operation system versions and may work incorrectly. Because TDL entirely based on this exact VirtualBox driver version LPE it is not wise to use it on newest version of Windows. Consider this repository as depricated/abandonware. The only possible updates can be related only to TDL loader itself.
 
 # Authors
 
-(c) 2016 - 2018 TDL Project
+(c) 2016 - 2019 TDL Project
 
 # Credits
 

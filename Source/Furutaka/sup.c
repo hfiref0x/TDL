@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2017
+*  (C) COPYRIGHT AUTHORS, 2016 - 2019
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     1.12
+*  VERSION:     1.14
 *
-*  DATE:        01 Dec 2017
+*  DATE:        05 Jan 2019
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -80,7 +80,7 @@ ULONG_PTR supGetNtOsBase(
     PRTL_PROCESS_MODULES   miSpace;
     ULONG_PTR              NtOsBase = 0;
 
-    miSpace = supGetSystemInfo(SystemModuleInformation);
+    miSpace = (PRTL_PROCESS_MODULES)supGetSystemInfo(SystemModuleInformation);
     while (miSpace != NULL) {
         NtOsBase = (ULONG_PTR)miSpace->Modules[0].ImageBase;
         RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, miSpace);
@@ -117,7 +117,7 @@ PBYTE supQueryResourceData(
 
         status = LdrFindResource_U(DllHandle, (ULONG_PTR*)&IdPath, 3, &DataEntry);
         if (NT_SUCCESS(status)) {
-            status = LdrAccessResource(DllHandle, DataEntry, &Data, &SizeOfData);
+            status = LdrAccessResource(DllHandle, DataEntry, (PVOID*)&Data, &SizeOfData);
             if (NT_SUCCESS(status)) {
                 if (DataSize) {
                     *DataSize = SizeOfData;
@@ -364,7 +364,7 @@ NTSTATUS NTAPI supEnumSystemObjects(
             if (status != STATUS_BUFFER_TOO_SMALL)
                 break;
 
-            objinf = RtlAllocateHeap(NtCurrentPeb()->ProcessHeap, HEAP_ZERO_MEMORY, rlen);
+            objinf = (POBJECT_DIRECTORY_INFORMATION)RtlAllocateHeap(NtCurrentPeb()->ProcessHeap, HEAP_ZERO_MEMORY, rlen);
             if (objinf == NULL)
                 break;
 
