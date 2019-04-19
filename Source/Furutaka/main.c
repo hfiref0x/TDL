@@ -533,6 +533,11 @@ HANDLE TDLStartVulnerableDriver(
 
             cuiPrintText(TEXT("Ldr: Active VirtualBox found in system, attempt stop (unload) it drivers"), TRUE);
 
+            if (!supStopVBoxService(schSCManager, VBOXUSBMON_SVC)) {
+                cuiPrintText(TEXT("SCM: Error stopping VBoxUSBMon, cannot continue"), TRUE);
+                break;
+            }
+
             if (!supStopVBoxService(schSCManager, VBOXNETADP_SVC)) {
                 cuiPrintText(TEXT("SCM: Error stopping VBoxNetAdp, cannot continue"), TRUE);
                 break;
@@ -540,11 +545,6 @@ HANDLE TDLStartVulnerableDriver(
 
             if (!supStopVBoxService(schSCManager, VBOXNETLWF_SVC)) {
                 cuiPrintText(TEXT("SCM: Error stopping VBoxNetLwf, cannot continue"), TRUE);
-                break;
-            }
-
-            if (!supStopVBoxService(schSCManager, VBOXUSBMON_SVC)) {
-                cuiPrintText(TEXT("SCM: Error stopping VBoxUSBMon, cannot continue"), TRUE);
                 break;
             }
 
