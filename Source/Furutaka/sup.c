@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     1.14
+*  VERSION:     1.15
 *
-*  DATE:        05 Jan 2019
+*  DATE:        19 Apr 2019
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -81,10 +81,9 @@ ULONG_PTR supGetNtOsBase(
     ULONG_PTR              NtOsBase = 0;
 
     miSpace = (PRTL_PROCESS_MODULES)supGetSystemInfo(SystemModuleInformation);
-    while (miSpace != NULL) {
+    if (miSpace) {
         NtOsBase = (ULONG_PTR)miSpace->Modules[0].ImageBase;
         RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, miSpace);
-        break;
     }
     return NtOsBase;
 }
@@ -405,7 +404,7 @@ NTSTATUS NTAPI supEnumSystemObjects(
 * Return TRUE if the given object exists, FALSE otherwise.
 *
 */
-BOOL supIsObjectExists(
+BOOLEAN supIsObjectExists(
     _In_ LPWSTR RootDirectory,
     _In_ LPWSTR ObjectName
 )
@@ -420,4 +419,188 @@ BOOL supIsObjectExists(
     Param.BufferSize = (ULONG)_strlen(ObjectName);
 
     return NT_SUCCESS(supEnumSystemObjects(RootDirectory, NULL, supDetectObjectCallback, &Param));
+}
+
+/*
+* supxStopServiceShowError
+*
+* Purpose:
+*
+* Display Function + LastError message for SCM part, Function limited to MAX_PATH.
+*
+*/
+VOID supxStopServiceShowError(
+    _In_ LPWSTR Function,
+    _In_ DWORD ErrorCode)
+{
+    WCHAR szMessage[300];
+
+    _strcpy(szMessage, TEXT("SCM: "));
+    _strcat(szMessage, Function);
+    _strcat(szMessage, TEXT(" failed ("));
+    ultostr(ErrorCode, _strend(szMessage));
+    _strcat(szMessage, TEXT(")"));
+    cuiPrintText(szMessage, TRUE);
+}
+
+/*
+* supStopVBoxService
+*
+* Purpose:
+*
+* Stop given VirtualBox service (unload kernel driver).
+*
+*/
+BOOLEAN supStopVBoxService(
+    _In_ SC_HANDLE schSCManager,
+    _In_ LPWSTR szSvcName //MAX_PATH limit
+)
+{
+    BOOLEAN bResult = FALSE;
+
+    SC_HANDLE schService;
+    SERVICE_STATUS_PROCESS ssp;
+    DWORD dwStartTime = GetTickCount();
+    DWORD dwBytesNeeded;
+    DWORD dwTimeout = 30000; //30 seconds timeout for this proc.
+    DWORD dwWaitTime;
+    DWORD dwLastError;
+
+    WCHAR szMessage[MAX_PATH * 2];
+
+    _strcpy(szMessage, TEXT("SCM: Attempt to stop "));
+    _strcat(szMessage, szSvcName);
+    cuiPrintText(szMessage, TRUE);
+
+    //
+    // Open service, if service does not exist consider this as success and leave.
+    //
+    schService = OpenService(
+        schSCManager,
+        szSvcName,
+        SERVICE_STOP |
+        SERVICE_QUERY_STATUS);
+
+    if (schService == NULL) {
+        dwLastError = GetLastError();
+        if (dwLastError == ERROR_SERVICE_DOES_NOT_EXIST) {
+            cuiPrintText(TEXT("SCM: Service does not exist, skip"), TRUE);
+            return TRUE;
+        }
+        else {
+            supxStopServiceShowError(TEXT("OpenService"), GetLastError());
+            return FALSE;
+        }
+    }
+
+    //
+    // Query service status.
+    //
+    if (!QueryServiceStatusEx(
+        schService,
+        SC_STATUS_PROCESS_INFO,
+        (LPBYTE)&ssp,
+        sizeof(SERVICE_STATUS_PROCESS),
+        &dwBytesNeeded))
+    {
+        supxStopServiceShowError(TEXT("QueryServiceStatusEx"), GetLastError());
+        goto stop_cleanup;
+    }
+
+    if (ssp.dwCurrentState == SERVICE_STOPPED) {
+        cuiPrintText(TEXT("SCM: Service is already stopped"), TRUE);
+        bResult = TRUE;
+        goto stop_cleanup;
+    }
+
+    //
+    // If service already in stop pending state, wait a little.
+    //
+    while (ssp.dwCurrentState == SERVICE_STOP_PENDING)
+    {
+        cuiPrintText(TEXT("SCM: Service stop pending..."), TRUE);
+
+        dwWaitTime = ssp.dwWaitHint / 10;
+
+        if (dwWaitTime < 1000)
+            dwWaitTime = 1000;
+        else if (dwWaitTime > 10000)
+            dwWaitTime = 10000;
+
+        Sleep(dwWaitTime);
+
+        if (!QueryServiceStatusEx(
+            schService,
+            SC_STATUS_PROCESS_INFO,
+            (LPBYTE)&ssp,
+            sizeof(SERVICE_STATUS_PROCESS),
+            &dwBytesNeeded))
+        {
+            supxStopServiceShowError(TEXT("QueryServiceStatusEx"), GetLastError());
+            goto stop_cleanup;
+        }
+
+        if (ssp.dwCurrentState == SERVICE_STOPPED)
+        {
+            cuiPrintText(TEXT("SCM: Service stopped successfully"), TRUE);
+            bResult = TRUE;
+            goto stop_cleanup;
+        }
+
+        //
+        // 30 seconds execution timeout reached.
+        //
+        if (GetTickCount() - dwStartTime > dwTimeout) {
+            cuiPrintText(TEXT("SCM: Service stop timed out.\n"), TRUE);
+            goto stop_cleanup;
+        }
+    }
+
+    //
+    // Stop service.
+    //
+    if (!ControlService(
+        schService,
+        SERVICE_CONTROL_STOP,
+        (LPSERVICE_STATUS)&ssp))
+    {
+        supxStopServiceShowError(TEXT("ControlService"), GetLastError());
+        goto stop_cleanup;
+    }
+
+    //
+    // Check whatever we need to wait for service stop.
+    //
+    while (ssp.dwCurrentState != SERVICE_STOPPED)
+    {
+        Sleep(ssp.dwWaitHint);
+        if (!QueryServiceStatusEx(
+            schService,
+            SC_STATUS_PROCESS_INFO,
+            (LPBYTE)&ssp,
+            sizeof(SERVICE_STATUS_PROCESS),
+            &dwBytesNeeded))
+        {
+            supxStopServiceShowError(TEXT("QueryServiceStatusEx"), GetLastError());
+            goto stop_cleanup;
+        }
+
+        if (ssp.dwCurrentState == SERVICE_STOPPED)
+            break;
+
+        //
+        // 30 seconds execution timeout reached.
+        //
+        if (GetTickCount() - dwStartTime > dwTimeout) {
+            cuiPrintText(TEXT("SCM: Wait timed out"), TRUE);
+            goto stop_cleanup;
+        }
+    }
+    cuiPrintText(TEXT("SCM: Service stopped successfully"), TRUE);
+    bResult = TRUE;
+
+stop_cleanup:
+    CloseServiceHandle(schService);
+
+    return bResult;
 }
