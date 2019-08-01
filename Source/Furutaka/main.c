@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.15
+*  VERSION:     1.16
 *
-*  DATE:        19 Apr 2019
+*  DATE:        20 June 2019
 *
 *  Furutaka entry point.
 *
@@ -36,11 +36,11 @@ ULONG      g_NtBuildNumber = 0;
 #define supImageName    "furutaka"
 #define supImageHandle  0x1a000
 
-#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.5 (19/04/19)")
+#define T_LOADERTITLE   TEXT("Turla Driver Loader v1.1.6 (20/06/19)")
 #define T_LOADERUNSUP   TEXT("Unsupported WinNT version\r\n")
 #define T_LOADERRUN     TEXT("Another instance running, close it before\r\n")
 #define T_LOADERUSAGE   TEXT("Usage: loader DriverToLoad\n\re.g. loader mydrv.sys\r\n")
-#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.5 started\r\n(c) 2016 - 2019 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
+#define T_LOADERINTRO   TEXT("Turla Driver Loader v1.1.6 started\r\n(c) 2016 - 2019 TDL Project\r\nSupported x64 OS : 7 and above\r\n")
 #define T_VBOXDETECT    TEXT("Ldr: Detected VirtualBox software installation, driver backup will be done")
 
 /*
@@ -175,8 +175,8 @@ void TDLExploit(
         Cookie.Hdr.cbOut = SUP_IOCTL_COOKIE_SIZE_OUT;
         Cookie.Hdr.fFlags = SUPREQHDR_FLAGS_DEFAULT;
         Cookie.Hdr.rc = 0;
-        Cookie.u.In.u32ReqVersion = 0;
-        Cookie.u.In.u32MinVersion = 0x00070002;
+        Cookie.u.In.u32ReqVersion = 0x000a0009;
+        Cookie.u.In.u32MinVersion = 0x000a0000;
         RtlCopyMemory(Cookie.u.In.szMagic, SUPCOOKIE_MAGIC, sizeof(SUPCOOKIE_MAGIC));
 
         if (!DeviceIoControl(g_hVBox, SUP_IOCTL_COOKIE,
